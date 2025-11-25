@@ -1,12 +1,9 @@
 [project]
-name = "pylab"
+name = "audio-player"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
-
-[tool.uv.workspace]
-members = [
-    "audio_player",
+dependencies = [
+    "pygame>=2.6.1",
 ]
