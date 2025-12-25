@@ -1,5 +1,5 @@
 def main():
-    print("Hello from pylab!")
+    print("Hello from scikit-learn-lab!")
 
 
 if __name__ == "__main__":
