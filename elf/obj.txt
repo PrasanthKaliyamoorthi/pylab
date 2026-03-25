@@ -1,0 +1,136 @@
+# This file `obj.txt` is a hexdump with comments to manually build an ELF file.
+# Lines starting with '#' are comments.
+# The rest is read as per `xxd -r -p` (see `man xxd`)
+# You can build the binary executable `obj.elf` using the command:
+# ```bash
+# <obj.txt grep -v '^#' | xxd -r -p >obj.elf
+# ```
+# You can then use chmod to make `obj.elf` executable.
+
+# ==================
+#   PROGRAM HEADER
+# ==================
+
+# An ELF file starts with a "header".
+# It is 64 bytes long for a 64-bit executable.
+# Note that the fact that it's twice 64 here is a coincidence really.
+
+# First we start with the "ELF" magic numbers (in ASCII encoding).
+# This is handled by Linux's `execve` which will try different handlers (including ELF).
+# See https://wenboshen.org/posts/2016-09-15-kernel-execve
+7f 45 4c 46
+# Next byte signals that it is a 64-bit executable, meaning that addresses in memory are 64 bits long (= 8 bytes).
+# It would be set to 0x1 for 32-bits.
+02
+# Next byte sets endianness, 0x1 means little endian (0x2 would mean big endian).
+01
+# Next byte sets version of ELF, currently still 0x1.
+01
+# Next byte sets the OS ABI this executable targets.
+# The mapping is a convention. Wikipedia says it should be 0x3,
+# but this https://lists.gnu.org/archive/html/bug-glibc/2001-05/msg00169.html says it should be 0.
+# Looking at various binaries, it seems that although Linux should be 0x3, most use 0x0. Probably: we don't care.
+00
+# Next byte sets the OS ABI version.
+# Since we use the Linux OS, it is treated as the feature level requested for the dynamic linker.
+00
+# Next 7 bytes are for padding. Linux docs says to set to all seven bytes to 0x0 as it is not used.
+00 00 00 00 00 00 00
+# Next 2 bytes set the object type, 0x2 means executable.
+# WARNING: this is where endianness becomes important.
+# The value is stored in 2 bytes, but the least significant portion (byte) is stored first.
+# Hence we don't write on file "0 2" (in binary "00000000 00000010") but "2 0" (in binary "00000010 00000000").
+02 00
+# Next 2 bytes set the target instruction set architecture, in my case 0x3e "AMD x86-64" for 64-bit x86.
+3e 00
+# Next 4 bytes set the object file version. It just needs to be at least 1.
+01 00 00 00
+# Next 8 bytes (64 bits) is the address of the entry point.
+# It depends how we load segments into memory.
+# In our case, we'll load everything at 0x400000.
+# The program is right after the header and header table so the offset is
+# header_size + n_headers * header_table_entry_size = 64 + 1 * 56 = 120 = 0x78
+78 00 40 00 00 00 00 00
+# Next 8 bytes is the offset to the "program header table".
+# Since the program header table follows the header, this equals the header's length (64 for 64 bits)
+40 00 00 00 00 00 00 00
+# Next 8 bytes is the offset to the "section header table".
+# Usually `size of header` + `size of program header table`
+# 0 means there is none.
+00 00 00 00 00 00 00 00
+# Next 4 bytes set the flags. Linux docs says "currently, no flags have been defined", so we set them all to 0.
+00 00 00 00
+# Next 2 bytes is the size of this header, 64 for 64 bits.
+40 00
+# Next 2 bytes is the size of an entry in the program header table, 56 for 64 bits.
+38 00
+# Next 2 bytes is the number of entries in the program header table.
+01 00
+# Next 2 bytes is the size of a section header table entry, 64 for 64 bits.
+40 00
+# Next 2 bytes is the number of entries in the section header table.
+00 00
+# Next 2 bytes is the index of the section header table entry that contains the section names.
+00 00
+
+# =======================
+#  PROGRAM HEADER TABLE
+# =======================
+
+# We require at least a LOAD entry to load the program into memory.
+
+# Next 4 bytes is the type of the segment, PT_LOAD (=1).
+01 00 00 00
+# Next 4 bytes is the flags of the segment.
+# It is a bit mask, meaning each bit activates a specific mode.
+# Commonly the code has PF_R = 0b0100 and PF_X = 0b0001, meaning 0b0101 = 0x05.
+05 00 00 00
+# Next 8 bytes is the offset in the file where the segment starts.
+# In our case we load all.
+00 00 00 00 00 00 00 00
+# Next 8 bytes is the virtual address where the segment is loaded.
+# Usually the program segments are loaded starting at 0x400000.
+# It's the only segment we load so we push it directly
+00 00 40 00 00 00 00 00
+# Next 8 bytes is the physical address where the segment is loaded on systems for which physical addressing is relevant.
+# In 64-bit mode we don't care because there is no physical adressing.
+# By convention it should be the same as the virtual address.
+00 00 40 00 00 00 00 00
+# Next 8 bytes is the number of bytes in the file image of the segment.
+# header_size + n_headers * header_table_entry_size + code_size = 64 + 1 * 56 + 7 = 127 = 0x7F.
+7F 00 00 00 00 00 00 00
+# Next 8 bytes is the number of bytes in the memory image of the segment.
+7F 00 00 00 00 00 00 00
+# Next 8 bytes is the alignment of the segment.
+# 0x1000 seems like a popular choice.
+00 10 00 00 00 00 00 00
+
+
+# =======
+#  CODE
+# =======
+
+# Binary instructions for x86-64 architecture.
+# This is a simple program that exits with code 42.
+
+# ASM: mov al, 60
+# instruction (Intel manual): MOV r8, imm8
+#   move an immediate value (8 bits) into a register (8 bits)
+# opcode: B0+rb ib
+#   'B0+rb' means that the first bits are '10110', and the last 3 bits are the register number.
+#   for instance to move a 1 byte immediate to register AL we use 0xB0,
+#   to move a 1 byte immediate to register CL we use 0xB1,
+#   and so on.
+#   'ib' means that the next byte is an immediate value, here 60 (=0x3C) because it is the code for the 'exit' syscall.
+B0 3C
+
+# ASM: mov dil, 0
+# instruction (Intel manual): MOV r8, imm8
+# opcode: B0+rb ib
+#   similar to above, however to write to register DIL we need REX.B prefix, then the register number is 7, so the opcode is 0xB7
+#   so we need to prefix with 0b01000000 (=0x40)
+#   and the immediate value is 0, so 0x00
+40 b7 00
+
+# now we can make a syscall to 'exit', of code 0x0f05 according to doc
+0F 05

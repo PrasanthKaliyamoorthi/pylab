@@ -10,4 +10,11 @@ dependencies = []
 members = [
     "audio_player",
     "scikit_learn_lab",
+    "neuran",
+    "deep_learning_for_coders",
+    "D",
+    "automateboringstuf",
+    "elf",
+    "wisper",
+    "Planetary",
 ]
